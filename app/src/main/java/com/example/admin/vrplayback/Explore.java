@@ -40,7 +40,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Explore extends Fragment implements OfflineContentManagerListener, ListItemActionListener {
+public class Explore extends Fragment implements OfflineContentManagerListener, ListItemActionListener, SelectedListener {
     private static final String TAG = Explore.class.getSimpleName();
 
     private File rootFolder;
@@ -53,6 +53,7 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
     private ListItem listItemForRetry = null;
 
     public static ListItemActionListener listItemActionListener;
+    public static SelectedListener selectedListener;
     private static ListItem customItem;
 
     @Nullable
@@ -65,12 +66,18 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
 
     protected void findView(View view){
         this.listView = (ListView) view.findViewById(R.id.listview);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
         Explore.listItemActionListener = this;
+        Explore.selectedListener = this;
         this.gson = new Gson();
         this.rootFolder = getContext().getDir("offline", ContextWrapper.MODE_PRIVATE);
 
-        this.listItems = getListItems();
-        this.listAdapter = new ListAdapter(getContext(), 0, this.listItems, this);
+        this.listItems = getItems();
+        this.listAdapter = new ListAdapter(getContext(), 0, this.listItems);
         this.listView.setAdapter(this.listAdapter);
 
         this.listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -79,6 +86,34 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
                 onListItemClicked((ListItem) parent.getItemAtPosition(position));
             }
         });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        requestOfflineContentOptions(this.listItems);
+    }
+
+    @Override
+    public void onStop() {
+        for (ListItem listItem : this.listItems)
+        {
+            listItem.getOfflineContentManager().release();
+        }
+        this.gson = null;
+        this.listItems = null;
+        this.listAdapter = null;
+        this.listView.setOnItemClickListener(null);
+        super.onStop();
+    }
+
+    private void requestOfflineContentOptions(List<ListItem> listItems) {
+        for (ListItem listItem : listItems)
+        {
+            // Request OfflineContentOptions from the OfflineContentManager.
+            // Note that the getOptions call is asynchronous, and that the result will be delivered to the according listener method onOptionsAvailable
+            listItem.getOfflineContentManager().getOptions();
+        }
     }
 
     private void onListItemClicked(ListItem listItem) {
@@ -115,67 +150,38 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
         {
             sourceItem = listItem.getSourceItem();
         }
+        Explore.customItem = listItem;
         startPlayerActivity(sourceItem);
-//        this.showSelectionDialog(listItem);
     }
 
     private void startPlayerActivity(SourceItem sourceItem) {
         Intent playerActivityIntent = new Intent(getContext(), PlayerActivity.class);
         String extraName = sourceItem instanceof OfflineSourceItem ? PlayerActivity.OFFLINE_SOURCE_ITEM : PlayerActivity.SOURCE_ITEM;
         playerActivityIntent.putExtra(extraName, gson.toJson(sourceItem));
-//        startActivity(playerActivityIntent);
+        startActivity(playerActivityIntent);
     }
 
-    private List<ListItem> getListItems() {
-//        List<ListItem> listItems = new ArrayList<>();
-//        // Get all objectKey from AWS S3 and loop it here
-//
-//        for (int i=0; i<10; i++){
-//            SourceItem vr4k = new SourceItem("https://qnet-vr-dev.s3.amazonaws.com/output_4k_1027/dash/stream.mpd");
-//            vr4k.setTitle("VR 4K Video");
-//
-//            OfflineContentManager vr4kOfflineContentManager = OfflineContentManager.getOfflineContentManager(vr4k, this.rootFolder.getPath(), "VR4K", this, getContext());
-//            ListItem vr4kItem = new ListItem(vr4k, vr4kOfflineContentManager);
-//            listItems.add(vr4kItem);
-//        }
-//
-//        return listItems;
+    private List<ListItem> getItems() {
         List<ListItem> listItems = new ArrayList<>();
+        // Get all objectKey from AWS S3 and loop it here
 
-        // Initialize a SourceItem
-        SourceItem artOfMotion = new SourceItem("https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd");
-        artOfMotion.setTitle("Art of Motion");
+        for (int i=0; i<10; i++){
+            SourceItem vr4k = new SourceItem("https://qnet-vr-dev.s3.amazonaws.com/output_4k_1027/dash/stream.mpd");
+//            SourceItem vr4k = new SourceItem("https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd");
+            vr4k.setTitle("VR 4K Video");
 
-        // Initialize an OfflineContentManager in the rootFolder with the id "artOfMotion"
-        OfflineContentManager artOfMotionOfflineContentManager = OfflineContentManager.getOfflineContentManager(artOfMotion, this.rootFolder.getPath(), "artOfMotion", this, getContext());
-
-        // Create a ListItem from the SourceItem and the OfflienContentManager
-        ListItem artOfMotionListItem = new ListItem(artOfMotion, artOfMotionOfflineContentManager);
-
-        // Add the ListItem to the List
-        listItems.add(artOfMotionListItem);
-
-        // Initialize a SourceItem with a DRM configuration
-        SourceItem artOfMotionDrm = new SourceItem("https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/mpds/11331.mpd");
-        artOfMotionDrm.addDRMConfiguration(new WidevineConfiguration("http://widevine-proxy.appspot.com/proxy"));
-        artOfMotionDrm.setTitle("Art of Motion with DRM");
-
-        // Initialize an OfflineContentManager in the rootFolder with the id "artOfMotionDrm"
-        OfflineContentManager artOfMotionDrmOfflineContentManager = OfflineContentManager.getOfflineContentManager(artOfMotionDrm, this.rootFolder.getPath(), "artOfMotionDrm", this, getContext());
-
-        // Create a ListItem from the SourceItem and the OfflienContentManager
-        ListItem artOfMotionDrmListItem = new ListItem(artOfMotionDrm, artOfMotionDrmOfflineContentManager);
-
-        // Add the ListItem to the List
-        listItems.add(artOfMotionDrmListItem);
-
+            OfflineContentManager vr4kOfflineContentManager = OfflineContentManager.getOfflineContentManager(vr4k, this.rootFolder.getPath(), "VR4K", this, getContext());
+            ListItem vr4kItem = new ListItem(vr4k, vr4kOfflineContentManager);
+            listItems.add(vr4kItem);
+        }
 
         return listItems;
     }
 
     @Override
     public void onCompleted(SourceItem sourceItem, OfflineContentOptions offlineContentOptions) {
-        Toast.makeText(getContext(), "onCompleted", Toast.LENGTH_LONG).show();
+//        Toast.makeText(getContext(), "onCompleted", Toast.LENGTH_LONG).show();
+        Log.d(Explore.class.getSimpleName(), "############################ onCompleted");
         ListItem listItem = getListItemWithSourceItem(sourceItem);
         if (listItem != null)
         {
@@ -198,11 +204,13 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
 
     @Override
     public void onError(SourceItem sourceItem, ErrorEvent errorEvent) {
-        Toast.makeText(getContext(), errorEvent.getMessage(), Toast.LENGTH_SHORT).show();
+//        Toast.makeText(getContext(), errorEvent.getMessage(), Toast.LENGTH_SHORT).show();
+        Log.d(Explore.class.getSimpleName(), "############################ " + errorEvent.getMessage());
     }
 
     @Override
     public void onProgress(SourceItem sourceItem, float progress) {
+        Log.d(Explore.class.getSimpleName(), "############################ onProgress");
         ListItem listItem = getListItemWithSourceItem(sourceItem);
         if (listItem != null){
             float oldProgress = listItem.getProgress();
@@ -217,6 +225,7 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
 
     @Override
     public void onOptionsAvailable(SourceItem sourceItem, OfflineContentOptions offlineContentOptions) {
+        Log.d(Explore.class.getSimpleName(), "############################ onOptionAvailable");
         ListItem listItem = getListItemWithSourceItem(sourceItem);
         if (listItem != null){
             // Update the OfflineContentOptions and notify the ListAdapter to update the views
@@ -227,6 +236,7 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
 
     @Override
     public void onDrmLicenseUpdated(SourceItem sourceItem) {
+        Log.d(Explore.class.getSimpleName(), "############################ onDrmLicenseUpdated");
         if (this.retryOfflinePlayback){
             if (this.listItemForRetry.getSourceItem() == sourceItem)
             {
@@ -241,79 +251,30 @@ public class Explore extends Fragment implements OfflineContentManagerListener, 
     }
 
     @Override
-    public void showSelectionDialog(ListItem listItem) {
-        OfflineContentOptions offlineContentOptions = listItem.getOfflineContentOptions();
-        if (listItem.getOfflineContentOptions() != null){
-            // Generating the needed lists, to create an AlertDialog, listing all options
-            List<OfflineOptionEntry> entries = Util.getAsOneList(offlineContentOptions);
-            String[] entriesAsText = new String[entries.size()];
-            boolean[] entriesCheckList = new boolean[entries.size()];
-            for (int i = 0; i < entriesAsText.length; i++){
-                OfflineOptionEntry oh = entries.get(i);
-                try{
-                    // Resetting the Action if set
-                    oh.setAction(null);
-                }
-                catch (IllegalOperationException e){
-                    // Won't happen
-                }
-                entriesAsText[i] = oh.getId() + "-" + oh.getMimeType();
-                entriesCheckList[i] = oh.getState() == OfflineOptionEntryState.DOWNLOADED || oh.getAction() == OfflineOptionEntryAction.DOWNLOAD;
-            }
-
-            // Building and showing the AlertDialog
-            AlertDialog.Builder dialogBuilder = generateAlertDialogBuilder(listItem, entries, entriesAsText, entriesCheckList);
-            dialogBuilder.show();
-        }else {
-            Toast.makeText(getContext(), "getOfflineContentOption null", Toast.LENGTH_LONG).show();
-        }
+    public void showSelectionDialog() {
+        PlayerActivity.requestListener.popUpDialog(Explore.customItem);
     }
 
-    private AlertDialog.Builder generateAlertDialogBuilder(final ListItem listItem, final List<OfflineOptionEntry> entries, String[] entriesAsText, boolean[] entriesCheckList) {
-        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(getContext()).setMultiChoiceItems(entriesAsText, entriesCheckList, new DialogInterface.OnMultiChoiceClickListener()
-        {
-            @Override
-            public void onClick(DialogInterface dialog, int which, boolean isChecked)
-            {
-                try{
-                    // Set an Download/Delete action, if the user changes the checked state
-                    OfflineOptionEntry offlineOptionEntry = entries.get(which);
-                    offlineOptionEntry.setAction(isChecked ? OfflineOptionEntryAction.DOWNLOAD : OfflineOptionEntryAction.DELETE);
-                }
-                catch (IllegalOperationException e){
-                    e.printStackTrace();
-                }
-
+    public void download(ListItem listItem, OfflineContentManager offlineContentManager) {
+        if (offlineContentManager != null){
+            try {
+                offlineContentManager.process(listItem.getOfflineContentOptions());
+            } catch (NoConnectionException e) {
+                e.printStackTrace();
             }
-        });
-        dialogBuilder.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener()
-        {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                download(listItem);
-            }
-        });
-        dialogBuilder.setNegativeButton(android.R.string.cancel, null);
-        return dialogBuilder;
-    }
-
-    private void download(ListItem listItem) {
-        OfflineContentManager offlineContentManager = listItem.getOfflineContentManager();
-        if (offlineContentManager == null){
-            return;
         }
 
-        try{
-            // Passing the OfflineContentOptions with set OfflineOptionEntryActions to the OfflineContentManager
-            offlineContentManager.process(listItem.getOfflineContentOptions());
-        }
-        catch (NoConnectionException e){
-            e.printStackTrace();
-        }
+        Toast.makeText(getContext(), "Start Downloading...", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void delete(ListItem listItem) {
-        Toast.makeText(getContext(), "delete", Toast.LENGTH_LONG).show();
+        listItem.getOfflineContentManager().deleteAll();
+        Toast.makeText(getContext(), "Deleting " + listItem.getSourceItem().getTitle(), Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onOptionSeletedListener(ListItem listItem, OfflineContentManager offlineContentManager) {
+        download(listItem, offlineContentManager);
     }
 }
